@@ -34,12 +34,16 @@ log = get_logger("gui")
 
 DEFAULT_MODEL = Path(__file__).resolve().parents[2] / "models" / "face_landmarker.task"
 ICON_PATH = Path(__file__).resolve().parents[2] / "assets" / "fylgja_icon.png"
+ICO_PATH = Path(__file__).resolve().parents[2] / "assets" / "fylgja.ico"
 BANNER_PATH = Path(__file__).resolve().parents[2] / "assets" / "fylgja.png"
+AUMID = "com.frankliwright.fylgja"
 
 
 def app_icon():
-    """窗口/托盘/任务栏图标（assets/fylgja_icon.png，透明底）。"""
+    """窗口/托盘/任务栏图标（优先多尺寸 .ico——Windows 任务栏认 ico 生成 HICON）。"""
     from PySide6.QtGui import QIcon
+    if ICO_PATH.exists():
+        return QIcon(str(ICO_PATH))
     return QIcon(str(ICON_PATH)) if ICON_PATH.exists() else QIcon()
 
 
@@ -867,6 +871,12 @@ def apply_app_font(app) -> None:
 
 
 def main(argv=None) -> int:
+    # 任务栏身份（Windows）：设置 AppUserModelID，任务栏/快捷方式统一显示自定义图标
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(AUMID)
+    except Exception:
+        pass
     from PySide6.QtWidgets import QApplication
 
     app = QApplication(argv or sys.argv)
