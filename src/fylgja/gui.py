@@ -81,12 +81,11 @@ def build_window():
             self._sent: tuple | None = None
             self._show_axes = True
             self._show_landmarks = True
-            self._show_values = True
             self._canonical: np.ndarray | None = None
             self._fps_text = ""
 
-        def set_options(self, axes: bool, landmarks: bool, values: bool):
-            self._show_axes, self._show_landmarks, self._show_values = axes, landmarks, values
+        def set_options(self, axes: bool, landmarks: bool):
+            self._show_axes, self._show_landmarks = axes, landmarks
 
         def set_canonical(self, v: np.ndarray):
             self._canonical = v  # (468,3)
@@ -127,15 +126,6 @@ def build_window():
             sent = self._sent
             if sent is not None and self._show_axes and lm is not None and self._canonical is not None:
                 self._draw_axes(p, x0, y0, img, sent, lm)
-
-            if sent is not None and self._show_values:
-                tx, ty, tz, yaw, pitch, roll = sent
-                txt = (f"TX {tx:+7.2f}  TY {ty:+7.2f}  TZ {tz:+7.2f}\n"
-                       f"yaw {yaw:+7.2f}°  pitch {pitch:+7.2f}°  roll {roll:+7.2f}°")
-                p.fillRect(8, 8, 250, 42, QColor(0, 0, 0, 150))
-                p.setPen(QColor("#FFFFFF"))
-                p.drawText(16, 27, txt.split("\n")[0])
-                p.drawText(16, 43, txt.split("\n")[1])
             if self._fps_text:
                 p.setPen(QColor("#B8B8B8"))
                 p.drawText(10, img.height() + y0 - 10, self._fps_text)
@@ -301,9 +291,7 @@ def build_window():
             tools.setSpacing(14)
             self.cbAxes = self._bind(QCheckBox(), "axes")
             self.cbDots = self._bind(QCheckBox(), "landmarks")
-            self.cbVals = self._bind(QCheckBox(), "values")
-            for cb, tip in ((self.cbAxes, "tip_axes"), (self.cbDots, "tip_landmarks"),
-                            (self.cbVals, "tip_values")):
+            for cb, tip in ((self.cbAxes, "tip_axes"), (self.cbDots, "tip_landmarks")):
                 cb.setChecked(True)
                 cb.setToolTip(t(tip))
                 cb.toggled.connect(self._apply_overlay_opts)
@@ -407,6 +395,58 @@ def build_window():
             invRow2.addStretch()
             pv.addLayout(invRow1)
             pv.addLayout(invRow2)
+
+            # ---- 空间音频（附属功能）----
+            self.lblSpatial = self._bind(self._mini(""), "spatial")
+            pv.addWidget(self.lblSpatial)
+            spTop = QHBoxLayout()
+            self.cbSpatialOn = self._bind(QCheckBox(), "spatial_on")
+            self.cbSpatialOn.toggled.connect(self._on_spatial_toggle)
+            spTop.addWidget(self.cbSpatialOn)
+            spTop.addStretch()
+            self.lblSpatialMeter = QLabel("L 1.00  R 1.00")
+            self.lblSpatialMeter.setObjectName("hint")
+            self.lblSpatialMeter.setToolTip(t("spatial_meter"))
+            spTop.addWidget(self.lblSpatialMeter)
+            pv.addLayout(spTop)
+
+            self.cmbSpatialOut = QComboBox()
+            self.cmbSpatialOut.setToolTip(t("spatial_out"))
+            try:
+                from .spatial_audio import list_render_devices
+                self._render_devices = list_render_devices()
+            except Exception:
+                self._render_devices = []
+            for idx, name in self._render_devices:
+                self.cmbSpatialOut.addItem(name, idx)
+            for i, (idx, name) in enumerate(self._render_devices):
+                if "Headphones" in name or "耳机" in name:
+                    self.cmbSpatialOut.setCurrentIndex(i)
+                    break
+            pv.addWidget(self.cmbSpatialOut)
+
+            self.slSpatialMax = self._slider(0, 20, 12)
+            self.slSpatialDz = self._slider(0, 30, 5)
+            self.lblSpatialMax = QLabel()
+            self.lblSpatialDz = QLabel()
+            for sl, lbl, name in ((self.slSpatialMax, self.lblSpatialMax, "spatial_max"),
+                                  (self.slSpatialDz, self.lblSpatialDz, "spatial_dz")):
+                row = QHBoxLayout()
+                nm = self._bind(QLabel(), name)
+                nm.setObjectName("hint")
+                row.addWidget(nm)
+                row.addStretch()
+                row.addWidget(lbl)
+                lbl.setObjectName("hint")
+                pv.addLayout(row)
+                pv.addWidget(sl)
+                sl.valueChanged.connect(self._on_spatial_cfg)
+            self.lblSpatialHint = self._bind(QLabel(), "spatial_hint")
+            self.lblSpatialHint.setObjectName("hint")
+            self.lblSpatialHint.setWordWrap(True)
+            pv.addWidget(self.lblSpatialHint)
+            self._on_spatial_cfg()
+
             pv.addStretch()
 
             body.addWidget(panel)
@@ -432,8 +472,7 @@ def build_window():
 
         def _apply_overlay_opts(self):
             self.preview.set_options(self.cbAxes.isChecked(),
-                                     self.cbDots.isChecked(),
-                                     self.cbVals.isChecked())
+                                     self.cbDots.isChecked())
 
         def _refresh_cameras(self):
             self.cmbCamera.blockSignals(True)
@@ -487,6 +526,39 @@ def build_window():
             if self.infer is not None:
                 self.infer._postprocessor.recenter()
                 self.statBar.setText("\u2713")
+
+        # ---------------- 空间音频 ----------------
+        def _on_spatial_toggle(self, on):
+            if on:
+                try:
+                    from .spatial_audio import GainConfig, SpatialAudioEngine
+                    self.spatial = SpatialAudioEngine(
+                        output_device=self.cmbSpatialOut.currentData(),
+                        cfg=GainConfig(max_db=float(self.slSpatialMax.value()),
+                                       deadzone_deg=float(self.slSpatialDz.value())))
+                    self.spatial.start()
+                    self.statBar.setText(f"\u2192 {self.spatial.output_name}")
+                except Exception as e:
+                    self.spatial = None
+                    self.cbSpatialOn.blockSignals(True)
+                    self.cbSpatialOn.setChecked(False)
+                    self.cbSpatialOn.blockSignals(False)
+                    QMessageBox.warning(self, t("err_start"), str(e))
+            else:
+                sp = getattr(self, "spatial", None)
+                if sp is not None:
+                    sp.stop()
+                    sp.join(timeout=2.0)
+                    self.spatial = None
+            self._on_spatial_cfg()
+
+        def _on_spatial_cfg(self, *_):
+            self.lblSpatialMax.setText(f"{self.slSpatialMax.value()} dB")
+            self.lblSpatialDz.setText(f"{self.slSpatialDz.value()}\u00b0")
+            sp = getattr(self, "spatial", None)
+            if sp is not None:
+                sp.cfg.max_db = float(self.slSpatialMax.value())
+                sp.cfg.deadzone_deg = float(self.slSpatialDz.value())
 
         # ---------------- 托盘 ----------------
         def _build_tray(self):
@@ -639,6 +711,11 @@ def build_window():
             self.banner.setVisible(False)
 
         def _teardown(self):
+            sp = getattr(self, "spatial", None)
+            if sp is not None:
+                sp.stop()
+                sp.join(timeout=2.0)
+                self.spatial = None
             if self.capture is not None:
                 self.capture.close()
                 self.capture = None
@@ -665,6 +742,13 @@ def build_window():
                 log.warning("几何元数据加载失败（坐标轴停用）：%s", e)
 
         def _poll(self):
+            # 稳定性：轮询异常不得杀死 QTimer
+            try:
+                self._poll_inner()
+            except Exception as e:
+                log.error("预览轮询异常：%s", e)
+
+        def _poll_inner(self):
             frame, _ts, seq = self.mailbox.get()
             if frame is None or self.infer is None:
                 return
@@ -680,6 +764,34 @@ def build_window():
                 fps_text = (f"{self._last_fps:4.1f}  {self.infer.infer_ms_last:.1f}ms  "
                             f"{self.sink.sent_count if self.sink else 0}")
             self.preview.update_frame(rgb, lm, sent, fps_text)
+            # 空间音频联动：yaw 驱动增益；追踪丢失 → 平滑回平衡
+            sp = getattr(self, "spatial", None)
+            if sp is not None:
+                if sent is not None:
+                    from .spatial_audio import gains_from_yaw
+                    gl, gr = gains_from_yaw(sent[3], sp.cfg)
+                    sp.set_targets(gl, gr)
+                else:
+                    sp.set_targets(1.0, 1.0, ramp_ms=sp.LOSS_RAMP_MS)
+                gl, gr = sp.current_gains
+                self.lblSpatialMeter.setText(f"L {gl:.2f}  R {gr:.2f}")
+            # 管线健康检查（稳定性）：出错/线程死亡 → 自动停机并提示
+            if self.running and self.infer is not None:
+                err = self.infer.error or (self.capture.error if self.capture else None)
+                if err:
+                    self.on_stop()
+                    self.statBar.setText(str(err))
+                elif not self.infer.is_alive() or (
+                        self.capture is not None and not self.capture.is_alive()):
+                    self.on_stop()
+                    self.statBar.setText(t("err_thread"))
+            sp = getattr(self, "spatial", None)
+            if sp is not None and not sp.is_alive():
+                self.spatial = None
+                self.cbSpatialOn.blockSignals(True)
+                self.cbSpatialOn.setChecked(False)
+                self.cbSpatialOn.blockSignals(False)
+                self.statBar.setText(t("spatial_dead"))
             if sent is not None:
                 self.statBar.setToolTip("yaw pitch roll | TX TY TZ | 已发送")
                 self.statBar.setText(

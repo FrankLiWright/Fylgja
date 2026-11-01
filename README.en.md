@@ -64,6 +64,20 @@ Dual inference engines: **NPU (Intel AI Boost)** offloads tracking from the CPU 
 
 **Tray**: closing the window minimizes to tray and tracking continues; tray menu offers show / start / stop / quit.
 
+## Spatial Audio (bonus feature)
+
+Adjusts left/right channel volume in real time by head orientation — a **fixed sound field**
+(turn left → left ear softens). When face tracking is lost, volume smoothly returns to balance
+within ~0.3 s. **Headphones recommended.**
+
+**Three steps:**
+
+1. Install [VB-CABLE](https://vb-audio.com/Cable/) (free virtual audio cable; not bundled)
+2. Switch system audio output to `CABLE Input (VB-Audio Virtual Cable)`
+3. In Fylgja's "Spatial Audio" panel: pick your headphones → check "Enable"
+
+Parameters: `Max attenuation` (default 12 dB), `Deadzone` (default 5°); L/R gain shown live.
+
 ## Getting it into games (War Thunder etc.)
 
 This app produces pose data; games are reached through **OpenTrack** (the open-source middle layer):

@@ -273,7 +273,13 @@ class ConfigStore:
 
     # ---- 落盘 ----
     def save(self, cfg: Config, previous: Config | None = None) -> None:
-        """立即落盘；previous 非空时逐键记录变更（9.4）。"""
+        """立即落盘；previous 非空时逐键记录变更（9.4）。写盘失败仅记日志，不中断运行。"""
+        try:
+            self._save_inner(cfg, previous)
+        except Exception as e:
+            log.warning("配置写盘失败：%s", e)
+
+    def _save_inner(self, cfg: Config, previous: Config | None = None) -> None:
         for key in SCALARS:
             val = getattr(cfg, key)
             sval = "true" if val is True else "false" if val is False else str(val)
