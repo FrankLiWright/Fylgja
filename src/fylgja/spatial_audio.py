@@ -108,6 +108,7 @@ class SpatialAudioEngine(threading.Thread):
         self._volume = _find_endpoint_volume("CABLE Input")
         self._master = 1.0
         self._vol_tick = 0
+        self.global_gain = 1.0  # 用户全局增益（0..2，>1 为放大；输出限幅 ±1）
 
         # ---- 设备解析（失败即抛，便于 GUI 同步报错）----
         in_idx = input_device if input_device is not None else self.find_capture_device()
@@ -213,8 +214,10 @@ class SpatialAudioEngine(threading.Thread):
             self._vol_tick += 1
             if self._vol_tick % 10 == 0:
                 self._poll_master_volume()
-            if self._master != 1.0:
-                block *= self._master
+            g = self._master * float(getattr(self, "global_gain", 1.0))
+            if g != 1.0:
+                block *= g
+                np.clip(block, -1.0, 1.0, out=block)  # 防削顶
             with self._cond:
                 if len(self._queue) < QUEUE_BLOCKS:
                     self._queue.append(block)

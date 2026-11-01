@@ -77,7 +77,8 @@ within ~0.3 s. **Headphones recommended.**
 3. In Fylgja's "Spatial Audio" panel: pick your headphones → check "Enable"
 
 Parameters: `Max attenuation` (default 12 dB, up to 60 dB — one ear can go near-silent),
-`Deadzone` (default 5°); L/R gain shown live.
+`Deadzone` (default 5°), `Global gain` (0–200% to lift overall volume, output-limited);
+L/R gain shown live.
 
 **System volume works directly**: adjust the CABLE device volume (what the Windows volume keys
 control) to change what you hear.

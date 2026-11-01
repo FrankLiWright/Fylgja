@@ -486,10 +486,14 @@ def build_window():
 
             self.slSpatialMax = self._slider(0, 60, 12)
             self.slSpatialDz = self._slider(0, 30, 5)
+            self.slGlobalGain = self._slider(0, 200, 100)
+            self.slGlobalGain.setToolTip(t("spatial_gain"))
             self.lblSpatialMax = QLabel()
             self.lblSpatialDz = QLabel()
+            self.lblGlobalGain = QLabel()
             for sl, lbl, name in ((self.slSpatialMax, self.lblSpatialMax, "spatial_max"),
-                                  (self.slSpatialDz, self.lblSpatialDz, "spatial_dz")):
+                                  (self.slSpatialDz, self.lblSpatialDz, "spatial_dz"),
+                                  (self.slGlobalGain, self.lblGlobalGain, "spatial_gain")):
                 row = QHBoxLayout()
                 nm = self._bind(QLabel(), name)
                 nm.setObjectName("hint")
@@ -596,6 +600,7 @@ def build_window():
                         cfg=GainConfig(max_db=float(self.slSpatialMax.value()),
                                        deadzone_deg=float(self.slSpatialDz.value())))
                     self.spatial.start()
+                    self.spatial.global_gain = self.slGlobalGain.value() / 100.0
                     self.statBar.setText(f"\u2192 {self.spatial.output_name}")
                 except Exception as e:
                     self.spatial = None
@@ -614,10 +619,12 @@ def build_window():
         def _on_spatial_cfg(self, *_):
             self.lblSpatialMax.setText(f"{self.slSpatialMax.value()} dB")
             self.lblSpatialDz.setText(f"{self.slSpatialDz.value()}\u00b0")
+            self.lblGlobalGain.setText(f"{self.slGlobalGain.value()}%")
             sp = getattr(self, "spatial", None)
             if sp is not None:
                 sp.cfg.max_db = float(self.slSpatialMax.value())
                 sp.cfg.deadzone_deg = float(self.slSpatialDz.value())
+                sp.global_gain = self.slGlobalGain.value() / 100.0
 
         # ---------------- 托盘 ----------------
         def _build_tray(self):
