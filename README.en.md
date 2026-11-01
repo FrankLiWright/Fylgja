@@ -42,7 +42,7 @@ Dual inference engines: **NPU (Intel AI Boost)** offloads tracking from the CPU 
    ```
 2. Right-click the ZIP → Properties → check **Unblock** → Apply, *then* extract (order matters).
 3. If SmartScreen appears: More info → **Run anyway** (normal for unsigned builds — not malware).
-4. Double-click **`Fylgja GUI.pyw`** (no console window).
+4. Double-click **`Fylgja.pyw`** (no console window). Recommended: right-click → Send to → Desktop shortcut — the Fylgja icon is used.
 5. Pick engine & camera, click **Start**. The preview showing your face with green landmarks means it works.
 
 > For the NPU engine, install the [Intel NPU driver](https://www.intel.com/content/www/us/en/download-center/home.html)
@@ -58,7 +58,7 @@ Dual inference engines: **NPU (Intel AI Boost)** offloads tracking from the CPU 
 | Output | Address & port OpenTrack listens on (default `127.0.0.1:4242`) |
 | Filter | `min_cutoff` (lower = steadier), `beta` (higher = snappier), live |
 | Invert | Flip individual axes (if direction feels wrong) |
-| Axes / Points / Values | Preview overlays (axes always drawn from the **actual sent values**) |
+| Axes / Points | Preview overlays (axes always drawn from the **actual sent values**) |
 | Recenter (F12) | Zero the current pose |
 | 中 / EN | Switch UI language |
 
