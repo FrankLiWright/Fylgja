@@ -52,8 +52,10 @@ def main() -> int:
 
     entries = []
     for f in files:
+        # 从 git 对象读取（规范化内容，树 sha 与本地完全一致）
+        data = subprocess.check_output(["git", "cat-file", "blob", f"HEAD:{f}"])
         blob = req("POST", "/git/blobs", {
-            "content": base64.b64encode(Path(f).read_bytes()).decode(),
+            "content": base64.b64encode(data).decode(),
             "encoding": "base64"})
         entries.append({"path": f, "mode": "100644", "type": "blob", "sha": blob["sha"]})
 
