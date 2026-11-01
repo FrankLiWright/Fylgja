@@ -55,6 +55,30 @@ def gains_from_yaw(yaw_deg: float, cfg: GainConfig) -> tuple[float, float]:
     return (att, 1.0) if y > 0 else (1.0, att)
 
 
+# ------------------------------------------------------------- 系统音量桥
+
+def _find_endpoint_volume(name_hint: str):
+    """返回名称匹配的渲染端点音量接口（找不到返回 None）。
+
+    VB-CABLE 驱动忽略端点音量设定——Windows 音量键调节的正是该端点，
+    因此由本引擎读取并作为主增益应用，使系统音量重新生效。
+    """
+    try:
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            from pycaw.pycaw import AudioUtilities
+            for dev in AudioUtilities.GetAllDevices():
+                fn = getattr(dev, "FriendlyName", "") or ""
+                if name_hint in fn:
+                    ep = getattr(dev, "EndpointVolume", None)
+                    if ep is not None:
+                        return ep
+    except Exception:
+        pass
+    return None
+
+
 # ------------------------------------------------------------- 双流引擎
 
 class SpatialAudioEngine(threading.Thread):
@@ -81,6 +105,9 @@ class SpatialAudioEngine(threading.Thread):
         self.blocks_out = 0
         self.underruns = 0
         self.error: str | None = None
+        self._volume = _find_endpoint_volume("CABLE Input")
+        self._master = 1.0
+        self._vol_tick = 0
 
         # ---- 设备解析（失败即抛，便于 GUI 同步报错）----
         in_idx = input_device if input_device is not None else self.find_capture_device()
@@ -127,6 +154,24 @@ class SpatialAudioEngine(threading.Thread):
     def current_gains(self) -> tuple[float, float]:
         return float(self._gains[0]), float(self._gains[1])
 
+    @property
+    def master_gain(self) -> float:
+        """系统音量主增益（0..1，含静音）。"""
+        return float(self._master)
+
+    def _poll_master_volume(self) -> None:
+        try:
+            if self._volume is None:
+                self._volume = _find_endpoint_volume("CABLE Input")  # 热重试
+            if self._volume is None:
+                self._master = 1.0
+                return
+            vol = float(self._volume.GetMasterVolumeLevelScalar())
+            muted = bool(self._volume.GetMute())
+            self._master = 0.0 if muted else max(0.0, min(1.0, vol))
+        except Exception:
+            self._master = 1.0
+
     def stop(self) -> None:
         self._stop_evt.set()
 
@@ -164,6 +209,12 @@ class SpatialAudioEngine(threading.Thread):
             nch = min(block.shape[1], 2)
             block[:, :nch] *= ramp[:, :nch].astype(np.float32)
             self._gains = nxt
+            # 系统音量：CABLE Input 端点音量 → 主增益（~100ms 轮询一次）
+            self._vol_tick += 1
+            if self._vol_tick % 10 == 0:
+                self._poll_master_volume()
+            if self._master != 1.0:
+                block *= self._master
             with self._cond:
                 if len(self._queue) < QUEUE_BLOCKS:
                     self._queue.append(block)

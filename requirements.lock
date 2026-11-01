@@ -11,8 +11,9 @@ numpy==2.5.4
 # 引擎 C（基线/兜底，零额外驱动）
 mediapipe==1.2.0
 opencv-python==5.0.0.93
-# 摄像头 DirectShow 枚举（camera_enum.py）
+# 摄像头 DirectShow 枚举（camera_enum.py）+ 端点音量（spatial_audio.py）
 comtypes==1.4.17
+pycaw==20260927
 # mediapipe 1.2.0 的连带依赖（一并锁定，禁止漂移）
 opencv-contrib-python==5.0.0.93
 absl-py==2.5.1

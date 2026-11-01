@@ -76,7 +76,11 @@ within ~0.3 s. **Headphones recommended.**
 2. Switch system audio output to `CABLE Input (VB-Audio Virtual Cable)`
 3. In Fylgja's "Spatial Audio" panel: pick your headphones → check "Enable"
 
-Parameters: `Max attenuation` (default 12 dB), `Deadzone` (default 5°); L/R gain shown live.
+Parameters: `Max attenuation` (default 12 dB, up to 60 dB — one ear can go near-silent),
+`Deadzone` (default 5°); L/R gain shown live.
+
+**System volume works directly**: adjust the CABLE device volume (what the Windows volume keys
+control) to change what you hear.
 
 ## Getting it into games (War Thunder etc.)
 

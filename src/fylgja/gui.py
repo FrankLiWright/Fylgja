@@ -104,6 +104,15 @@ def build_window():
             self._fps_text = fps_text
             self.update()
 
+        def clear(self):
+            """停止后清空预览（回到深色空态）。"""
+            self._qimage = None
+            self._landmarks = None
+            self._sent = None
+            self._fps_text = ""
+            self._axes_cache = None
+            self.update()
+
         def paintEvent(self, ev):
             # 稳定性：绘制异常不得逃逸（否则 Qt 绘制状态损坏 → 缩放时崩溃）
             try:
@@ -475,7 +484,7 @@ def build_window():
                     break
             pv.addWidget(self.cmbSpatialOut)
 
-            self.slSpatialMax = self._slider(0, 20, 12)
+            self.slSpatialMax = self._slider(0, 60, 12)
             self.slSpatialDz = self._slider(0, 30, 5)
             self.lblSpatialMax = QLabel()
             self.lblSpatialDz = QLabel()
@@ -759,6 +768,7 @@ def build_window():
             self.btnStop.setEnabled(False)
             self.statBar.setText("")
             self.banner.setVisible(False)
+            self.preview.clear()  # 停止后关闭预览画面（回空态）
 
         def _teardown(self):
             sp = getattr(self, "spatial", None)
