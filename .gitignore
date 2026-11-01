@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 模型与产物（模型文件按方案书 11 随包分发，不入库）
+*.task
+models/
+
+# 打包产物
+*.spec
+SHA256SUMS
+
+# 测试产物
+out/
+*.log
+
+# 第三方参考源码（许可不明，不入库；见 docs/IR摄像头调用链路.md §8）
+IRCameraView-master/
+*.zip
+
+# 含人脸的测试素材（隐私，仅本地保留）
+test.mp4
+docs/ir_test_frame_*.png
+
+# 图标原件（已复制进 assets/）
+/Fylgja.png
+Fylgja 无背景.png

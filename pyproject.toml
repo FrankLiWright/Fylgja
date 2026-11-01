@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Fylgja"
+version = "0.1.0"
+description = "通用摄像头头部追踪软件（OpenTrack 数据源，双引擎 NPU/CPU）"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+]
+
+[project.optional-dependencies]
+# 引擎 C 基线/兜底（方案书 4.1）；mediapipe 需 Python 3.11
+engine-c = ["mediapipe==1.2.0", "opencv-python"]
+# 引擎 N（方案书 4.3）；openvino 版本与 NPU 驱动配对见方案书 4.5/15
+engine-n = ["openvino", "opencv-python"]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
