@@ -134,8 +134,9 @@ def build_window():
                 pts = QPolygonF()
                 for pt in lm:
                     pts.append(QPointF(int(x0 + pt[0] * tw), int(y0 + pt[1] * th)))
-                p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QColor(60, 220, 120, 190))
+                # drawPoints 用画笔绘制（NoPen 会导致不可见——勿改回）
+                p.setPen(QPen(QColor(60, 220, 120, 190), 2))
+                p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawPoints(pts)
 
             sent = self._sent
@@ -211,6 +212,7 @@ def build_window():
             self.setWindowTitle(f"Fylgja · 头部追踪  v{__version__}")
             self.setWindowIcon(app_icon())
             self.setMinimumSize(920, 620)
+            self._default_size_applied = False
             self.resize(1080, 680)
             self.store = ConfigStore()
             self.cfg: Config = self.store.load()
@@ -240,6 +242,24 @@ def build_window():
             self._sync_theme()
 
         # ---------------- UI ----------------
+        def showEvent(self, ev):
+            super().showEvent(ev)
+            if not self._default_size_applied:
+                self._default_size_applied = True
+                self._apply_default_size()
+
+        def _apply_default_size(self):
+            """默认窗口 = 1783×1213 屏幕像素（含标题栏），按 DPI 与边框换算客户区。"""
+            try:
+                dpr = self.devicePixelRatioF() or 1.0
+                fg, g = self.frameGeometry(), self.geometry()
+                fw = max(fg.width() - g.width(), 0)
+                fh = max(fg.height() - g.height(), 0)
+                self.resize(max(920, round(1783 / dpr) - fw),
+                            max(620, round(1213 / dpr) - fh))
+            except Exception:
+                self.resize(1189, 776)
+
         def _sync_theme(self):
             dark = is_system_dark()
             if dark != getattr(self, "_dark", None):
