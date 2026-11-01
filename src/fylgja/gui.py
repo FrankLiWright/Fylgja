@@ -55,7 +55,7 @@ class PreviewWidget:
 
 def build_window():
     """构造 MainWindow 类（延迟导入 Qt，便于非 GUI 测试不依赖 PySide6）。"""
-    from PySide6.QtCore import Qt, QTimer, QSize, Signal, QObject
+    from PySide6.QtCore import Qt, QTimer, QSize, Signal, QObject, QRect, QPointF
     from PySide6.QtGui import (QAction, QColor, QImage, QPainter, QPainterPath,
                                QPen, QPixmap, QFont, QIcon, QShortcut, QKeySequence,
                                QPolygonF, QLinearGradient)
@@ -81,6 +81,7 @@ def build_window():
             self._sent: tuple | None = None
             self._show_axes = True
             self._show_landmarks = True
+            self._axes_cache = None  # ((sent, tw, th), wmat) 投影矩阵缓存
             self._canonical: np.ndarray | None = None
             self._fps_text = ""
 
@@ -100,71 +101,96 @@ def build_window():
             self.update()
 
         def paintEvent(self, ev):
+            # 稳定性：绘制异常不得逃逸（否则 Qt 绘制状态损坏 → 缩放时崩溃）
+            try:
+                self._paint()
+            except Exception as e:
+                try:
+                    log.error("预览绘制异常：%s", e)
+                except Exception:
+                    pass
+
+        def _paint(self):
             p = QPainter(self)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
             rect = self.rect()
+            w_r, h_r = rect.width(), rect.height()
+            if w_r <= 0 or h_r <= 0:
+                return
             if self._qimage is None:
                 p.fillRect(rect, QColor("#171717"))
                 return
-            img = self._qimage.scaled(rect.size(),
-                                      Qt.AspectRatioMode.KeepAspectRatio,
-                                      Qt.TransformationMode.SmoothTransformation)
-            x0 = (rect.width() - img.width()) // 2
-            y0 = (rect.height() - img.height()) // 2
-            p.drawImage(x0, y0, img)
-            sx = img.width() / self._qimage.width()
-            sy = img.height() / self._qimage.height()
+            iw, ih = self._qimage.width(), self._qimage.height()
+            if iw <= 0 or ih <= 0:
+                return
+            # 直接按目标矩形绘制（避免 scaled() 逐帧分配——缩放窗口时卡死的主因）
+            scale = min(w_r / iw, h_r / ih)
+            tw, th = max(int(iw * scale), 1), max(int(ih * scale), 1)
+            x0, y0 = (w_r - tw) // 2, (h_r - th) // 2
+            p.drawImage(QRect(x0, y0, tw, th), self._qimage)
 
             lm = self._landmarks
             if lm is not None and self._show_landmarks:
+                pts = QPolygonF()
+                for pt in lm:
+                    pts.append(QPointF(int(x0 + pt[0] * tw), int(y0 + pt[1] * th)))
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QColor(60, 220, 120, 190))
-                for pt in lm:
-                    p.drawEllipse(int(x0 + pt[0] * img.width()),
-                                  int(y0 + pt[1] * img.height()), 2, 2)
+                p.drawPoints(pts)
 
             sent = self._sent
             if sent is not None and self._show_axes and lm is not None and self._canonical is not None:
-                self._draw_axes(p, x0, y0, img, sent, lm)
+                self._draw_axes(p, x0, y0, tw, th, sent, lm)
             if self._fps_text:
                 p.setPen(QColor("#B8B8B8"))
-                p.drawText(10, img.height() + y0 - 10, self._fps_text)
+                p.drawText(10, y0 + th - 10, self._fps_text)
 
-        def _draw_axes(self, p, x0, y0, img, sent, lm):
-            """坐标轴：由发送值重建 R，经 度量→图像 仿射投影（预览契约 8.1）。"""
-            tx, ty, tz, yaw, pitch, roll = sent
-            rmat = rotation_matrix(yaw, pitch, roll)
-            metric = (rmat @ self._canonical.T).T + np.array([tx, ty, tz])
-            target = lm[:468, :2] * np.array([img.width(), img.height()])
-            a = np.hstack([metric, np.ones((len(metric), 1))])
-            try:
-                wmat, *_ = np.linalg.lstsq(a, target, rcond=None)
-            except np.linalg.LinAlgError:
-                return
+        def _draw_axes(self, p, x0, y0, tw, th, sent, lm):
+            """坐标轴：由发送值重建 R，经 度量→图像 仿射投影（预览契约 8.1）。
+
+            投影矩阵按 (发送值, 画布尺寸) 缓存——窗口缩放时避免逐帧 lstsq。
+            """
+            key = (tuple(float(v) for v in sent), tw, th)
+            wmat = None
+            if self._axes_cache is not None and self._axes_cache[0] == key:
+                wmat = self._axes_cache[1]
+            else:
+                tx, ty, tz, yaw, pitch, roll = sent
+                rmat = rotation_matrix(yaw, pitch, roll)
+                metric = (rmat @ self._canonical.T).T + np.array([tx, ty, tz])
+                target = lm[:468, :2] * np.array([tw, th])
+                a = np.hstack([metric, np.ones((len(metric), 1))])
+                try:
+                    wmat, *_ = np.linalg.lstsq(a, target, rcond=None)
+                except np.linalg.LinAlgError:
+                    return
+                if not np.isfinite(wmat).all():
+                    return
+                self._axes_cache = (key, wmat)
 
             def proj(pt3):
                 return np.array([pt3[0], pt3[1], pt3[2], 1.0]) @ wmat
 
+            tx, ty, tz, yaw, pitch, roll = sent
+            rmat = rotation_matrix(yaw, pitch, roll)
             origin = np.array([tx, ty, tz])
-            nose = proj(origin) if True else None
             colors = [(230, 70, 70), (70, 200, 110), (80, 140, 255)]
             for i, color in enumerate(colors):
                 tip3 = origin + rmat[:, i] * 4.0
                 p0 = proj(origin)
                 p1 = proj(tip3)
-                pen = QPen(QColor(*color), 3)
-                p.setPen(pen)
+                if not (np.isfinite(p0).all() and np.isfinite(p1).all()):
+                    continue
+                p.setPen(QPen(QColor(*color), 3))
                 p.setBrush(QColor(*color))
                 p.drawLine(int(x0 + p0[0]), int(y0 + p0[1]),
                            int(x0 + p1[0]), int(y0 + p1[1]))
-                # 箭头
                 dx, dy = p1 - p0
                 n = max(float(np.hypot(dx, dy)), 1e-6)
                 ux, uy = dx / n, dy / n
                 px, py = -uy, ux
                 base = p1 - 0.25 * n * np.array([ux, uy])
                 poly = QPolygonF()
-                from PySide6.QtCore import QPointF
                 for q in ((p1[0], p1[1]),
                           (base[0] + 6 * px, base[1] + 6 * py),
                           (base[0] - 6 * px, base[1] - 6 * py)):
@@ -174,7 +200,7 @@ def build_window():
             # 鼻尖点
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QColor(255, 255, 255))
-            np_pt = lm[1] * np.array([img.width(), img.height()])
+            np_pt = lm[1] * np.array([tw, th])
             p.drawEllipse(int(x0 + np_pt[0]) - 3, int(y0 + np_pt[1]) - 3, 6, 6)
 
     class MainWindow(QMainWindow):
